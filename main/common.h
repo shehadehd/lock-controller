@@ -71,8 +71,24 @@ enum MESSAGEIDTYPE
  
     MESSAGE_ID_END  = UINT8_MAX
 };
+
+enum STATUSPININDEXTYPE
+{
+    STATUS_BOTTOM_LEFT,
+    STATUS_BOTTOM_RIGHT,
+    STATUS_MIDDLE_LEFT,
+    STATUS_MIDDLE_RIGHT,
+    STATUS_MIDDLE_CENTER,
+    STATUS_UPPER_LEFT,
+    STATUS_UPPER_RIGHT,
+    STATUS_TOP_LEFT,
+    STATUS_TOP_RIGHT,
+    STATUS_TOP_CENTER,
+
+    STATUS_PIN_COUNT
+};
  
-struct STATEMACHINEDATATYPE;
+struct STATEMACHINECONTEXTTYPE;
 struct SYSTEMDATATYPE;
 struct STATEMACHINECLASSTYPE;
 struct PERIPHERALDATATYPE;
@@ -88,8 +104,9 @@ typedef enum MOTORSTATUS                eMotorStatus;
 typedef enum DOCKSTATES                 eDockState;
 typedef enum LOCKSTATES                 eLockState;
 typedef enum MESSAGEIDTYPE              eMessageId;
- 
-typedef struct STATEMACHINEDATATYPE     suStateMachineData;
+ typedef enum STATUSPININDEXTYPE        eStatusPinIndex;
+
+typedef struct STATEMACHINECONTEXTTYPE  suStateMachineContext;
 typedef struct SYSTEMDATATYPE           suSystemData;
 typedef struct STATEMACHINECLASSTYPE    suStateMachineClass;
 typedef struct PERIPHERALDATATYPE       suPeripheralData;
@@ -98,9 +115,9 @@ typedef struct NETWORKHEADERTYPE        suNetworkHeader;
 typedef struct NETWORKPACKETTYPE        suNetworkPacket;
 typedef struct NETWORKRECEIVEDATATYPE   suNetworkReceiveData;
  
-typedef void (*state_entry)(void);
-typedef uint32_t (*state_execute)(void);
-typedef void (*state_exit)(void);
+typedef void (*state_entry)(void* pContext);
+typedef uint32_t (*state_execute)(void* pContext);
+typedef void (*state_exit)(void* pContext);
  
  
 /* User defined field of data. */
@@ -137,10 +154,12 @@ struct STATEMACHINECLASSTYPE
     state_execute on_Execute;
 };
  
-struct STATEMACHINEDATATYPE
+struct STATEMACHINECONTEXTTYPE
 {
     suStateMachineClass *states;
+    void* pContext;
     uint32_t currentState;
+    uint32_t nextState;
     uint32_t uStateStartTime;
     uint32_t uStateElapsedTime;
 };
@@ -157,7 +176,7 @@ struct PERIPHERALDATATYPE
 struct SYSTEMDATATYPE
 {
     bool bDockingRequested;
-    suPeripheralData PeripheralData;
+    suPeripheralData AggregatePeripheralData;
 };
  
 #endif

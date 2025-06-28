@@ -1,4 +1,4 @@
-idf_component_register(SRCS "peripheral" "state_machine.c" "main.c" "communication.c"
+idf_component_register(SRCS "peripheral.c" "peripheral" "state_machine.c" "main.c" "communication.c"
                     PRIV_REQUIRES spi_flash
                     PRIV_REQUIRES esp_driver_gpio
                     PRIV_REQUIRES nvs_flash

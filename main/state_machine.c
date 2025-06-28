@@ -13,18 +13,18 @@
  
 extern suSystemData systemData;
  
-static void Start_Up_On_Entry(void);
-static uint32_t Start_Up_On_Execute(void);
-static void Wait_For_Dock_On_Entry(void);
-static uint32_t Wait_For_Dock_On_Execute(void);
-static void Locking_On_Entry(void);
-static uint32_t Locking_On_Execute(void);
-static void Unlocking_On_Entry(void);
-static uint32_t Unlocking_On_Execute(void);
-static void Locked_On_Entry(void);
-static uint32_t Locked_On_Execute(void);
-static void Faulted_On_Entry(void);
-static uint32_t Faulted_On_Execute(void);
+static void Start_Up_On_Entry(void* pContext);
+static uint32_t Start_Up_On_Execute(void* pContext);
+static void Wait_For_Dock_On_Entry(void* pContext);
+static uint32_t Wait_For_Dock_On_Execute(void* pContext);
+static void Locking_On_Entry(void* pContext);
+static uint32_t Locking_On_Execute(void* pContext);
+static void Unlocking_On_Entry(void* pContext);
+static uint32_t Unlocking_On_Execute(void* pContext);
+static void Locked_On_Entry(void* pContext);
+static uint32_t Locked_On_Execute(void* pContext);
+static void Faulted_On_Entry(void* pContext);
+static uint32_t Faulted_On_Execute(void* pContext);
  
 static suStateMachineClass stateMachine[SYSTEM_STATE_END] =
 {
@@ -36,56 +36,56 @@ static suStateMachineClass stateMachine[SYSTEM_STATE_END] =
     [SYSTEM_STATE_FAULTED] =         {.sName = "FAULTED",        .on_Entry = Faulted_On_Entry,       .on_Exit = NULL,    .on_Execute = Faulted_On_Execute        },
 };
  
-static suStateMachineData  stateMachineData;
+static suStateMachineContext  stateMachineContext;
 extern suSystemData systemData;
  
  
-static void run_state_machine()
+static void run_state_machine(suStateMachineContext  StateMachineContext)
 {
     static uint32_t nextState = SYSTEM_STATE_START;
    
-    if (nextState != stateMachineData.currentState)
+    if (nextState != stateMachineContext.currentState)
     {
         if( nextState >= SYSTEM_STATE_END)
         {
             nextState = SYSTEM_STATE_FAULTED;
         }
        
-        network_send((uint8_t*)stateMachineData.states[nextState].sName,
-                    strlen(stateMachineData.states[nextState].sName),
+        network_send((uint8_t*)StateMachineContext.states[nextState].sName,
+                    strlen(StateMachineContext.states[nextState].sName),
                     SYSTEM_STATE_REPORT);
                    
-        if (stateMachineData.states[stateMachineData.currentState].on_Exit != NULL)
+        if (StateMachineContext.states[stateMachineContext.currentState].on_Exit != NULL)
         {
-            stateMachineData.states[stateMachineData.currentState].on_Exit();
+            StateMachineContext.states[StateMachineContext.currentState].on_Exit(StateMachineContext.pContext);
         }
  
-        stateMachineData.uStateStartTime = xTaskGetTickCount();
-        stateMachineData.uStateElapsedTime = 0;
-        stateMachineData.currentState = nextState;
+        StateMachineContext.uStateStartTime = xTaskGetTickCount();
+        StateMachineContext.uStateElapsedTime = 0;
+        StateMachineContext.currentState = nextState;
  
-        if (stateMachineData.states[stateMachineData.currentState].on_Entry != NULL)
+        if (StateMachineContext.states[StateMachineContext.currentState].on_Entry != NULL)
         {
-            stateMachineData.states[stateMachineData.currentState].on_Entry();
+            StateMachineContext.states[StateMachineContext.currentState].on_Entry(StateMachineContext.pContext);
         }
     }
     else
     {
-        stateMachineData.uStateElapsedTime = (xTaskGetTickCount() - stateMachineData.uStateStartTime);
+        StateMachineContext.uStateElapsedTime = (xTaskGetTickCount() - StateMachineContext.uStateStartTime);
        
-        if (stateMachineData.states[stateMachineData.currentState].on_Execute != NULL)
+        if (StateMachineContext.states[StateMachineContext.currentState].on_Execute != NULL)
         {
-            nextState = stateMachineData.states[stateMachineData.currentState].on_Execute();
+            nextState = StateMachineContext.states[StateMachineContext.currentState].on_Execute(StateMachineContext.pContext);
         }
     }
 }
  
-static void Start_Up_On_Entry(void)
+static void Start_Up_On_Entry(void* pContext)
 {
     peripheral_unlock_clamp();
 }
  
-static uint32_t Start_Up_On_Execute(void)
+static uint32_t Start_Up_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_START_UP;
    
@@ -94,18 +94,18 @@ static uint32_t Start_Up_On_Execute(void)
     return nextState;
 }
  
-static void Wait_For_Dock_On_Entry(void)
+static void Wait_For_Dock_On_Entry(void* pContext)
 {
     peripheral_stop_clamp();
 }
  
-static uint32_t Wait_For_Dock_On_Execute(void)
+static uint32_t Wait_For_Dock_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_WAIT_FOR_DOCK;
    
     if (systemData.bDockingRequested)
     {
-        if(systemData.PeripheralData.DockStatus == DOCK_STATUS_DOCKED)
+        if(systemData.AggregatePeripheralData.DockStatus == DOCK_STATUS_DOCKED)
         {
             // docking detected, proceed to locking phase
             nextState = SYSTEM_STATE_LOCKING;
@@ -115,20 +115,20 @@ static uint32_t Wait_For_Dock_On_Execute(void)
     return nextState;
 }
  
-static void Locking_On_Entry(void)
+static void Locking_On_Entry(void* pContext)
 {
     peripheral_lock_clamp();
 }
  
-static uint32_t Locking_On_Execute(void)
+static uint32_t Locking_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_LOCKING;
    
     if (systemData.bDockingRequested)
     {
-        if (systemData.PeripheralData.DockStatus == DOCK_STATUS_DOCKED)
+        if (systemData.AggregatePeripheralData.DockStatus == DOCK_STATUS_DOCKED)
         {
-            if (systemData.PeripheralData.LockStatus == LOCK_STATUS_LOCKED)
+            if (systemData.AggregatePeripheralData.LockStatus == LOCK_STATUS_LOCKED)
             {
                 // detected locking complete. stop driving actuator
                 nextState = SYSTEM_STATE_LOCKED;
@@ -149,16 +149,16 @@ static uint32_t Locking_On_Execute(void)
     return nextState;
 }
  
-static void Unlocking_On_Entry(void)
+static void Unlocking_On_Entry(void* pContext)
 {
     peripheral_unlock_clamp();
 }
  
-static uint32_t Unlocking_On_Execute(void)
+static uint32_t Unlocking_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_LOCKING;
    
-    if (systemData.PeripheralData.LockStatus == LOCK_STATUS_UNLOCKED)
+    if (systemData.AggregatePeripheralData.LockStatus == LOCK_STATUS_UNLOCKED)
     {
         // clamp fully unlocked, return to idle to proceed with next request
         nextState = SYSTEM_STATE_WAIT_FOR_DOCK;
@@ -167,12 +167,12 @@ static uint32_t Unlocking_On_Execute(void)
     return nextState;
 }
  
-static void Locked_On_Entry(void)
+static void Locked_On_Entry(void* pContext)
 {
     peripheral_stop_clamp();
 }
  
-static uint32_t Locked_On_Execute(void)
+static uint32_t Locked_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_LOCKING;
    
@@ -185,12 +185,12 @@ static uint32_t Locked_On_Execute(void)
     return nextState;
 }
  
-static void Faulted_On_Entry(void)
+static void Faulted_On_Entry(void* pContext)
 {
     peripheral_unlock_clamp();
 }
  
-static uint32_t Faulted_On_Execute(void)
+static uint32_t Faulted_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_FAULTED;
    
@@ -204,14 +204,14 @@ void state_machine_task(void *pvParameter)
     while(1)
     {
         vTaskDelay(10);
-        run_state_machine();
+        run_state_machine(stateMachineContext);
     }
 }
  
 void state_machine_init()
 {
-    stateMachineData.states = stateMachine;
-    stateMachineData.currentState = SYSTEM_STATE_START_UP;
+    stateMachineContext.states = stateMachine;
+    stateMachineContext.currentState = SYSTEM_STATE_START_UP;
  
     xTaskCreate(state_machine_task, "state_machine_task", 2048, NULL, 4, NULL);
 }

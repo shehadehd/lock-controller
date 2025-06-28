@@ -10,11 +10,7 @@
  
 #define DRIVE_DEADTIME_MS               1
 #define PERIPHERAL_START_UP_TIMEOUT_MS  1000
- 
- 
-#define GET_DOCKED_STATUS()     (gpio_get_level(GPIO_DOCKED_STATUS) == false)
-#define GET_LOCK_STATUS()       (gpio_get_level(GPIO_LOCK_STATUS) == false)
- 
+  
 #define LOCK_CLAMP()            {                                                   \
                                     gpio_set_level(GPIO_UNLOCK_EXTERNAL, false);    \
                                     vTaskDelay(DRIVE_DEADTIME_MS); /*1ms deadtime*/ \
@@ -32,12 +28,27 @@
                                     gpio_set_level(GPIO_UNLOCK_EXTERNAL, false);    \
                                 }
  
-static uint32_t Start_Up_On_Execute(void);
-static uint32_t Unknown_On_Execute(void);
-static uint32_t Unlocked_On_Execute(void);
-static uint32_t Locked_On_Execute(void);
+typedef struct PERIPHERALCONTEXTTYPE    suPeripheralContext;
+
+struct PERIPHERALCONTEXTTYPE
+{
+    eStatusPinIndex LockPinIndex;
+    eStatusPinIndex DockPinIndex;
+    gpio_num_t motorLockPin;
+    gpio_num_t motorUnlockPin;
+    gpio_num_t dockPin;
+    gpio_num_t lockPin;
+    suPeripheralData PeripheralData;
+};
+
+
+static uint32_t Start_Up_On_Execute(void* pContext);
+static uint32_t Unknown_On_Execute(void* pContext);
+static uint32_t Unlocked_On_Execute(void* pContext);
+static uint32_t Locked_On_Execute(void* pContext);
  
-static suStateMachineClass stateMachine[LOCK_STATE_END] =
+// Framework that each endpoint uses for status evaluation
+static suStateMachineClass individualStateMachine[LOCK_STATE_END] =
 {
     [LOCK_STATE_START_UP] = {.sName = "LOCK_STATE_START_UP",    .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute   },
     [LOCK_STATE_UNKNOWN] =  {.sName = "LOCK_STATE_UNKNOWN",     .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Unknown_On_Execute    },
@@ -45,64 +56,83 @@ static suStateMachineClass stateMachine[LOCK_STATE_END] =
     [LOCK_STATE_LOCKED] =   {.sName = "LOCK_STATE_LOCKED",      .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Locked_On_Execute     },
 };
  
-static suStateMachineData  stateMachineData;
+// aggregation of all endpoint state machines for parsed referencing
+static suStateMachineClass* aggregateStateMachine[STATUS_PIN_COUNT] =
+{
+    [STATUS_BOTTOM_LEFT] = &individualStateMachine[STATUS_BOTTOM_LEFT],
+    [STATUS_BOTTOM_RIGHT] = &individualStateMachine[STATUS_BOTTOM_RIGHT],
+    [STATUS_MIDDLE_LEFT] = &individualStateMachine[STATUS_MIDDLE_LEFT],
+    [STATUS_MIDDLE_RIGHT] = &individualStateMachine[STATUS_MIDDLE_RIGHT],
+    [STATUS_MIDDLE_CENTER] = &individualStateMachine[STATUS_MIDDLE_CENTER],
+    [STATUS_UPPER_LEFT] = &individualStateMachine[STATUS_UPPER_LEFT],
+    [STATUS_UPPER_RIGHT] = &individualStateMachine[STATUS_UPPER_RIGHT],
+    [STATUS_TOP_LEFT] = &individualStateMachine[STATUS_TOP_LEFT],
+    [STATUS_TOP_RIGHT] = &individualStateMachine[STATUS_TOP_RIGHT],
+    [STATUS_TOP_CENTER] = &individualStateMachine[STATUS_TOP_CENTER],
+};
+
+// object to hold all endpoint state machine contexts
+static suStateMachineContext  aIndividualStateMachineContext[STATUS_PIN_COUNT];
  
- 
+static suPeripheralContext aPeripheralContext[STATUS_PIN_COUNT];
+
 extern suSystemData        systemData;
  
  
-static void run_state_machine()
+static void run_state_machine(suStateMachineContext StateMachineContext)
 {
-    static uint32_t nextState = SYSTEM_STATE_START;
+    uint32_t nextState = StateMachineContext.nextState;
    
-    if (nextState != stateMachineData.currentState)
+    if (nextState != StateMachineContext.currentState)
     {
         if( nextState >= SYSTEM_STATE_END)
         {
             nextState = SYSTEM_STATE_FAULTED;
         }
        
-        network_send((uint8_t*)stateMachineData.states[nextState].sName,
-                    strlen(stateMachineData.states[nextState].sName),
-                    LOCK_STATE_REPORT);
+        // network_send((uint8_t*)StateMachineContext.states[nextState].sName,
+        //             strlen(StateMachineContext.states[nextState].sName),
+        //             LOCK_STATE_REPORT);
                    
-        if (stateMachineData.states[stateMachineData.currentState].on_Exit != NULL)
+        if (StateMachineContext.states[StateMachineContext.currentState].on_Exit != NULL)
         {
-            stateMachineData.states[stateMachineData.currentState].on_Exit();
+            StateMachineContext.states[StateMachineContext.currentState].on_Exit(&StateMachineContext);
         }
  
-        stateMachineData.uStateStartTime = xTaskGetTickCount();
-        stateMachineData.uStateElapsedTime = 0;
-        stateMachineData.currentState = nextState;
+        StateMachineContext.uStateStartTime = xTaskGetTickCount();
+        StateMachineContext.uStateElapsedTime = 0;
+        StateMachineContext.currentState = nextState;
  
-        if (stateMachineData.states[stateMachineData.currentState].on_Entry != NULL)
+        if (StateMachineContext.states[StateMachineContext.currentState].on_Entry != NULL)
         {
-            stateMachineData.states[stateMachineData.currentState].on_Entry();
+            StateMachineContext.states[StateMachineContext.currentState].on_Entry(&StateMachineContext);
         }
     }
     else
     {
-        stateMachineData.uStateElapsedTime = (xTaskGetTickCount() - stateMachineData.uStateStartTime);
+        StateMachineContext.uStateElapsedTime = (xTaskGetTickCount() - StateMachineContext.uStateStartTime);
        
-        if (stateMachineData.states[stateMachineData.currentState].on_Execute != NULL)
+        if (StateMachineContext.states[StateMachineContext.currentState].on_Execute != NULL)
         {
-            nextState = stateMachineData.states[stateMachineData.currentState].on_Execute();
+            nextState = StateMachineContext.states[StateMachineContext.currentState].on_Execute(&StateMachineContext);
         }
     }
 }
  
-static uint32_t Start_Up_On_Execute(void)
+static uint32_t Start_Up_On_Execute(void* pContext)
 {
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = LOCK_STATE_START_UP;
  
-    if(GET_LOCK_STATUS() == ASSERTED)
+    if(pPeripheralContext->dockPin == ASSERTED)
     {
-        if (systemData.PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
+        if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
         {
-            if (stateMachineData.uStateElapsedTime > PERIPHERAL_START_UP_TIMEOUT_MS)
+            if (pStateMachineContext->uStateElapsedTime > PERIPHERAL_START_UP_TIMEOUT_MS)
             {
-                systemData.PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
-                systemData.PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
+                pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
+                pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
                 nextState = LOCK_STATE_UNLOCKED;
             }
         }
@@ -111,22 +141,24 @@ static uint32_t Start_Up_On_Execute(void)
     return nextState;
 }
  
-static uint32_t Unknown_On_Execute(void)
+static uint32_t Unknown_On_Execute(void* pContext)
 {
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = LOCK_STATE_UNKNOWN;
    
-    if(GET_LOCK_STATUS() == ASSERTED)
+    if(pPeripheralContext->lockPin == ASSERTED)
     {
-        if (systemData.PeripheralData.MotorStatus == MOTOR_STATUS_LOCKING)
+        if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_LOCKING)
         {
-            systemData.PeripheralData.MotorStatus = MOTOR_STATUS_LOCKED;
-            systemData.PeripheralData.LockStatus = LOCK_STATUS_LOCKED;
+            pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_LOCKED;
+            pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_LOCKED;
             nextState = LOCK_STATE_LOCKED;
         }
-        else if (systemData.PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
+        else if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
         {
-            systemData.PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
-            systemData.PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
+            pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
+            pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
             nextState = LOCK_STATE_UNLOCKED;
         }
     }
@@ -134,37 +166,42 @@ static uint32_t Unknown_On_Execute(void)
     return nextState;
 }
  
-static uint32_t Unlocked_On_Execute(void)
+static uint32_t Unlocked_On_Execute(void* pContext)
 {
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = LOCK_STATE_UNLOCKED;
    
-    if(GET_LOCK_STATUS() != ASSERTED)
+    if(pPeripheralContext->lockPin != ASSERTED)
     {
-        systemData.PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
+        pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
         nextState = LOCK_STATE_UNKNOWN;
     }
  
     return nextState;
 }
  
-static uint32_t Locked_On_Execute(void)
+static uint32_t Locked_On_Execute(void* pContext)
 {
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = LOCK_STATE_LOCKED;
    
-    if(GET_LOCK_STATUS() != ASSERTED)
+    if(pPeripheralContext->lockPin != ASSERTED)
     {
-        systemData.PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
+        pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
         nextState = LOCK_STATE_UNKNOWN;
     }
  
     return nextState;
 }
- 
-void run_peripheral(void)
+
+void update_peripheral(suPeripheralContext *pPeripheralContext, uint32_t peripheral)
 {
-    systemData.PeripheralData.DockStatus = (GET_DOCKED_STATUS() == ASSERTED) ? DOCK_STATUS_DOCKED : DOCK_STATUS_UNDOCKED;
- 
-    run_state_machine();
+    pPeripheralContext->dockPin = (gpio_get_level(aDockPin[peripheral]) == ASSERTED);
+    pPeripheralContext->PeripheralData.DockStatus = (pPeripheralContext->dockPin == ASSERTED) ? DOCK_STATUS_DOCKED : DOCK_STATUS_UNDOCKED;
+
+    pPeripheralContext->lockPin = (gpio_get_level(aLockPin[peripheral]) == ASSERTED);
 }
  
 void peripheral_task(void *pvParameter)
@@ -172,7 +209,11 @@ void peripheral_task(void *pvParameter)
     while(1)
     {
         vTaskDelay(1000);
-        run_peripheral();
+        for (int peripheral = 0; peripheral < STATUS_PIN_COUNT; peripheral++)
+        {
+            update_peripheral(aIndividualStateMachineContext[peripheral].pContext, peripheral);
+            run_state_machine(aIndividualStateMachineContext[peripheral]);
+        }
         network_send((uint8_t*)&systemData, sizeof(systemData), SYSTEM_REPORT);
         // network_send((uint8_t*)&systemData.PeripheralData.DockedState, sizeof(systemData.PeripheralData.DockedState), DOCK_COMMAND);
     }
@@ -182,23 +223,48 @@ void peripheral_init(void)
 {
     gpio_config_t gpio_conf = {0};
  
-    stateMachineData.states = stateMachine;
-    stateMachineData.currentState = LOCK_STATE_START_UP;
- 
-    systemData.PeripheralData.DockStatus = DOCK_STATUS_UNKNOWN;
-    systemData.PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
-    systemData.PeripheralData.MotorStatus = MOTOR_STATUS_STOPPED;
+    // initialize each endpoint state machine
+    for (int i = 0; i < STATUS_PIN_COUNT; i++)
+    {
+        aPeripheralContext[i].LockPinIndex = aLockPin[i];
+        aPeripheralContext[i].DockPinIndex = aDockPin[i];
+        aPeripheralContext[i].motorLockPin = aMotorLockPin[i];
+        aPeripheralContext[i].motorUnlockPin = aMotorUnlockPin[i];
+
+        aIndividualStateMachineContext[i].states = aggregateStateMachine[i];
+        aIndividualStateMachineContext[i].currentState = LOCK_STATE_START_UP;
+        aIndividualStateMachineContext[i].nextState = LOCK_STATE_START_UP;
+        
+        aIndividualStateMachineContext[i].pContext = (void*)&aPeripheralContext[i];
+
+        aPeripheralContext[i].PeripheralData.DockStatus = DOCK_STATUS_UNKNOWN;
+        aPeripheralContext[i].PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
+        aPeripheralContext[i].PeripheralData.MotorStatus = MOTOR_STATUS_STOPPED;
+    }
+
+    systemData.AggregatePeripheralData.DockStatus = DOCK_STATUS_UNKNOWN;
+    systemData.AggregatePeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
+    systemData.AggregatePeripheralData.MotorStatus = MOTOR_STATUS_STOPPED;
  
     gpio_conf.intr_type = GPIO_INTR_DISABLE;    // Disable interrupt for now
     gpio_conf.mode = GPIO_MODE_INPUT;  // Set as input mode
-    gpio_conf.pin_bit_mask = (1ULL << GPIO_DOCKED_STATUS | 1ULL << GPIO_LOCK_STATUS);
+    for (int i = 0; i < STATUS_PIN_COUNT; i++)
+    {
+        gpio_conf.pin_bit_mask |= 1ULL << aLockPin[i];
+        gpio_conf.pin_bit_mask |= 1ULL << aDockPin[i];
+    }
     gpio_conf.pull_up_en = GPIO_PULLUP_ENABLE;  // Enable internal pull-up resistor
     gpio_conf.pull_down_en = GPIO_PULLDOWN_DISABLE; // Disable pull-down
     gpio_config(&gpio_conf);
  
     gpio_conf.intr_type = GPIO_INTR_DISABLE;    // Disable interrupt for now
     gpio_conf.mode = GPIO_MODE_OUTPUT;  // Set as input mode
-    gpio_conf.pin_bit_mask = (1ULL << GPIO_LOCK_EXTERNAL | 1ULL << GPIO_UNLOCK_EXTERNAL);
+    gpio_conf.pin_bit_mask = 0;
+    for (int i = 0; i < STATUS_PIN_COUNT; i++)
+    {
+        gpio_conf.pin_bit_mask |= 1ULL << aMotorLockPin[i];
+        gpio_conf.pin_bit_mask |= 1ULL << aMotorUnlockPin[i];
+    }
     gpio_conf.pull_up_en = GPIO_PULLUP_DISABLE;  // Disable internal pull-up resistor
     gpio_conf.pull_down_en = GPIO_PULLDOWN_ENABLE; // Enable internal pull-down
     gpio_config(&gpio_conf);  
