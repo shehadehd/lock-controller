@@ -64,7 +64,7 @@ struct SYSTEMCONTEXTTYPE
 
 ///////// LOCAL VARIABLES //////////////////////////////////////////////////////////////////////////
 
-static suStateMachineClass individualStateMachine[SYSTEM_STATE_END] =
+static suStateMachineClass StateMachineTemplate[SYSTEM_STATE_END] =
 {
     [SYSTEM_STATE_START_UP] =        {.sName = NULL,    .on_Entry = Start_Up_On_Entry,      .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute       },
     [SYSTEM_STATE_WAIT_FOR_DOCK] =   {.sName = NULL,    .on_Entry = Wait_For_Dock_On_Entry, .on_Exit = NULL,    .on_Execute = Wait_For_Dock_On_Execute  },
@@ -74,21 +74,6 @@ static suStateMachineClass individualStateMachine[SYSTEM_STATE_END] =
     [SYSTEM_STATE_FAULTED] =         {.sName = NULL,    .on_Entry = Faulted_On_Entry,       .on_Exit = NULL,    .on_Execute = Faulted_On_Execute        },
 };
  
-// aggregation of all endpoint state machines for parsed referencing
-static suStateMachineClass* aggregateStateMachine[ENDPOINT_COUNT] =
-{
-    [ENDPOINT_BOTTOM_LEFT] =      &individualStateMachine[ENDPOINT_BOTTOM_LEFT],
-    [ENDPOINT_BOTTOM_RIGHT] =     &individualStateMachine[ENDPOINT_BOTTOM_RIGHT],
-    [ENDPOINT_MIDDLE_LEFT] =      &individualStateMachine[ENDPOINT_MIDDLE_LEFT],
-    [ENDPOINT_MIDDLE_RIGHT] =     &individualStateMachine[ENDPOINT_MIDDLE_RIGHT],
-    [ENDPOINT_MIDDLE_CENTER] =    &individualStateMachine[ENDPOINT_MIDDLE_CENTER],
-    [ENDPOINT_UPPER_LEFT] =       &individualStateMachine[ENDPOINT_UPPER_LEFT],
-    [ENDPOINT_UPPER_RIGHT] =      &individualStateMachine[ENDPOINT_UPPER_RIGHT],
-    [ENDPOINT_TOP_LEFT] =         &individualStateMachine[ENDPOINT_TOP_LEFT],
-    [ENDPOINT_TOP_RIGHT] =        &individualStateMachine[ENDPOINT_TOP_RIGHT],
-    [ENDPOINT_TOP_CENTER] =       &individualStateMachine[ENDPOINT_TOP_CENTER],
-};
-
 static char* aSystemStateNames[SYSTEM_STATE_END] =
 {
     [SYSTEM_STATE_START_UP]         = "SYSTEM_START_UP",
@@ -98,6 +83,9 @@ static char* aSystemStateNames[SYSTEM_STATE_END] =
     [SYSTEM_STATE_LOCKED]           = "SYSTEM_LOCKED",
     [SYSTEM_STATE_FAULTED]          = "SYSTEM_FAULTED",
 };
+
+// aggregation of all endpoint state machines for parsed referencing
+static suStateMachineClass aggregateStateMachine[ENDPOINT_COUNT][SYSTEM_STATE_END];
 
 // object to hold all endpoint state machine contexts
 static suStateMachineContext  aIndividualStateMachineContext[ENDPOINT_COUNT];
@@ -306,7 +294,11 @@ void controller_init()
         aSystemContext[endpoint].Endpoint = endpoint;
         aSystemContext[endpoint].sName = aEndpointNames[endpoint];
 
-        aggregateStateMachine[endpoint]->sName = aSystemStateNames[endpoint];
+        memcpy(&aggregateStateMachine[endpoint], StateMachineTemplate, sizeof(StateMachineTemplate));
+        for (int state = SYSTEM_STATE_START; state < SYSTEM_STATE_END; state++)
+        {
+            aggregateStateMachine[endpoint][state].sName = aSystemStateNames[state];
+        }
 
         aIndividualStateMachineContext[endpoint].StateMachine = aggregateStateMachine[endpoint];
         aIndividualStateMachineContext[endpoint].currentState = SYSTEM_STATE_START_UP;

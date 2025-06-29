@@ -84,7 +84,7 @@ struct PERIPHERALCONTEXTTYPE
 ///////// LOCAL VARIABLES //////////////////////////////////////////////////////////////////////////
  
 // Framework that each endpoint uses for status evaluation
-static suStateMachineClass individualStateMachine[PERIPHERAL_STATE_END] =
+static suStateMachineClass StateMachineTemplate[PERIPHERAL_STATE_END] =
 {
     [PERIPHERAL_STATE_START_UP] = {.sName = NULL,   .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute   },
     [PERIPHERAL_STATE_UNKNOWN] =  {.sName = NULL,   .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Unknown_On_Execute    },
@@ -92,21 +92,6 @@ static suStateMachineClass individualStateMachine[PERIPHERAL_STATE_END] =
     [PERIPHERAL_STATE_LOCKED] =   {.sName = NULL,   .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Locked_On_Execute     },
 };
  
-// aggregation of all endpoint state machines for parsed referencing
-static suStateMachineClass* aggregateStateMachine[ENDPOINT_COUNT] =
-{
-    [ENDPOINT_BOTTOM_LEFT] =      &individualStateMachine[ENDPOINT_BOTTOM_LEFT],
-    [ENDPOINT_BOTTOM_RIGHT] =     &individualStateMachine[ENDPOINT_BOTTOM_RIGHT],
-    [ENDPOINT_MIDDLE_LEFT] =      &individualStateMachine[ENDPOINT_MIDDLE_LEFT],
-    [ENDPOINT_MIDDLE_RIGHT] =     &individualStateMachine[ENDPOINT_MIDDLE_RIGHT],
-    [ENDPOINT_MIDDLE_CENTER] =    &individualStateMachine[ENDPOINT_MIDDLE_CENTER],
-    [ENDPOINT_UPPER_LEFT] =       &individualStateMachine[ENDPOINT_UPPER_LEFT],
-    [ENDPOINT_UPPER_RIGHT] =      &individualStateMachine[ENDPOINT_UPPER_RIGHT],
-    [ENDPOINT_TOP_LEFT] =         &individualStateMachine[ENDPOINT_TOP_LEFT],
-    [ENDPOINT_TOP_RIGHT] =        &individualStateMachine[ENDPOINT_TOP_RIGHT],
-    [ENDPOINT_TOP_CENTER] =       &individualStateMachine[ENDPOINT_TOP_CENTER],
-};
-
 // list of all endpoint lock peripherals
 static gpio_num_t aLockPin[ENDPOINT_COUNT] = 
 {
@@ -167,8 +152,6 @@ static gpio_num_t aMotorUnlockPin[ENDPOINT_COUNT] =
     [ENDPOINT_TOP_CENTER]     = GPIO_MOTOR_UNLOCK_10_,
 };
 
-
-
 static char* aPeripheralStateNames[PERIPHERAL_STATE_END] =
 {
     [PERIPHERAL_STATE_START_UP]     = "PERIPHERAL_START_UP",
@@ -176,6 +159,9 @@ static char* aPeripheralStateNames[PERIPHERAL_STATE_END] =
     [PERIPHERAL_STATE_UNLOCKED]     = "PERIPHERAL_UNLOCKED",
     [PERIPHERAL_STATE_LOCKED]       = "PERIPHERAL_LOCKED",
 };
+
+// aggregation of all endpoint state machines for parsed referencing
+static suStateMachineClass aggregateStateMachine[ENDPOINT_COUNT][PERIPHERAL_STATE_END];
 
 // object to hold all endpoint state machine contexts
 static suStateMachineContext  aIndividualStateMachineContext[ENDPOINT_COUNT];
@@ -388,7 +374,11 @@ void peripheral_init(void)
         aPeripheralContext[endpoint].PeripheralData.MotorStatus = MOTOR_STATUS_STOPPED;
         aPeripheralContext[endpoint].sName = aEndpointNames[endpoint];
 
-        aggregateStateMachine[endpoint]->sName = aPeripheralStateNames[endpoint];
+        memcpy(&aggregateStateMachine[endpoint], StateMachineTemplate, sizeof(StateMachineTemplate));
+        for (int state = PERIPHERAL_STATE_START; state < PERIPHERAL_STATE_END; state++)
+        {
+            aggregateStateMachine[endpoint][state].sName = aPeripheralStateNames[state];
+        }
 
         aIndividualStateMachineContext[endpoint].StateMachine = aggregateStateMachine[endpoint];
         aIndividualStateMachineContext[endpoint].currentState = PERIPHERAL_STATE_START_UP;

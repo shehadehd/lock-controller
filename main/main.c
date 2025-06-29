@@ -55,7 +55,7 @@ void app_main()
 {
     network_init();
     peripheral_init();
-    //controller_init();
+    controller_init();
 }
 
 ///////// POST-CODE COMPILER DIRECTIVES ////////////////////////////////////////////////////////////
