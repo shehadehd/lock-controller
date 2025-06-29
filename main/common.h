@@ -1,15 +1,30 @@
 #ifndef COMMON_H
 #define COMMON_H
  
+///////// PRE-INCLUDE PRE-PROCESSOR DIRECTIVES /////////////////////////////////////////////////////
+
+///////// INCLUDES /////////////////////////////////////////////////////////////////////////////////
+
 #include <inttypes.h>
 #include "esp_now.h"
  
- 
+///////// POST-INCLUDE PRE-PROCESSOR DIRECTIVES ////////////////////////////////////////////////////
+
+
+
+
+
+///////// MNEMONICS ////////////////////////////////////////////////////////////////////////////////
+
+///////// DEFINES //////////////////////////////////////////////////////////////////////////////
+
 #define MAX_PACKET_LENGTH 256
  
 #define ASSERTED        true
 #define DEASSERTED      false
  
+///////// ENUMERATIONS /////////////////////////////////////////////////////////////////////////
+
 enum SYSTEMSTATES
 {
     SYSTEM_STATE_START,
@@ -24,16 +39,16 @@ enum SYSTEMSTATES
     SYSTEM_STATE_END
 };
  
-enum LOCKSTATES
+enum PERIPHERALSTATES
 {
-    LOCK_STATE_START,
+    PERIPHERAL_STATE_START,
  
-    LOCK_STATE_START_UP = LOCK_STATE_START,
-    LOCK_STATE_UNKNOWN,
-    LOCK_STATE_UNLOCKED,
-    LOCK_STATE_LOCKED,
+    PERIPHERAL_STATE_START_UP = PERIPHERAL_STATE_START,
+    PERIPHERAL_STATE_UNKNOWN,
+    PERIPHERAL_STATE_UNLOCKED,
+    PERIPHERAL_STATE_LOCKED,
  
-    LOCK_STATE_END
+    PERIPHERAL_STATE_END
 };
  
 enum DOCKSTATUS
@@ -63,8 +78,7 @@ enum MESSAGEIDTYPE
 {
     HELLO           = 0,
     SYSTEM_REPORT   = 10,
-    SYSTEM_STATE_REPORT,
-    LOCK_STATE_REPORT,
+    STATE_REPORT,
     ERROR_REPORT,
  
     DOCK_COMMAND    = 20,
@@ -72,45 +86,50 @@ enum MESSAGEIDTYPE
     MESSAGE_ID_END  = UINT8_MAX
 };
 
-enum STATUSPININDEXTYPE
+enum ENDPOINTTYPE
 {
-    STATUS_BOTTOM_LEFT,
-    STATUS_BOTTOM_RIGHT,
-    STATUS_MIDDLE_LEFT,
-    STATUS_MIDDLE_RIGHT,
-    STATUS_MIDDLE_CENTER,
-    STATUS_UPPER_LEFT,
-    STATUS_UPPER_RIGHT,
-    STATUS_TOP_LEFT,
-    STATUS_TOP_RIGHT,
-    STATUS_TOP_CENTER,
+    ENDPOINT_BOTTOM_LEFT,
+    ENDPOINT_BOTTOM_RIGHT,
+    ENDPOINT_MIDDLE_LEFT,
+    ENDPOINT_MIDDLE_RIGHT,
+    ENDPOINT_MIDDLE_CENTER,
+    ENDPOINT_UPPER_LEFT,
+    ENDPOINT_UPPER_RIGHT,
+    ENDPOINT_TOP_LEFT,
+    ENDPOINT_TOP_RIGHT,
+    ENDPOINT_TOP_CENTER,
 
-    STATUS_PIN_COUNT
+    ENDPOINT_COUNT
 };
- 
+
+///////// FORWARD STRUCT DECLARATIONS //////////////////////////////////////////////////////////////
+
 struct STATEMACHINECONTEXTTYPE;
 struct SYSTEMDATATYPE;
 struct STATEMACHINECLASSTYPE;
 struct PERIPHERALDATATYPE;
- 
+struct STATEREPORTTYPE;
+
 struct NETWORKHEADERTYPE;
 struct SENDDATAPACKETTYPE;
 struct NETWORKRECEIVEDATATYPE;
  
+///////// TYPEDEFS /////////////////////////////////////////////////////////////////////////////////
+
 typedef enum SYSTEMSTATES               eSystemState;
 typedef enum DOCKSTATUS                 eDockStatus;
 typedef enum LOCKSTATUS                 eLockStatus;
 typedef enum MOTORSTATUS                eMotorStatus;
-typedef enum DOCKSTATES                 eDockState;
-typedef enum LOCKSTATES                 eLockState;
+typedef enum PERIPHERALSTATES           ePeripheralState;
 typedef enum MESSAGEIDTYPE              eMessageId;
- typedef enum STATUSPININDEXTYPE        eStatusPinIndex;
+typedef enum ENDPOINTTYPE               eEndpoint;
 
 typedef struct STATEMACHINECONTEXTTYPE  suStateMachineContext;
 typedef struct SYSTEMDATATYPE           suSystemData;
 typedef struct STATEMACHINECLASSTYPE    suStateMachineClass;
 typedef struct PERIPHERALDATATYPE       suPeripheralData;
- 
+typedef struct STATEREPORTTYPE          suStateReport;
+
 typedef struct NETWORKHEADERTYPE        suNetworkHeader;
 typedef struct NETWORKPACKETTYPE        suNetworkPacket;
 typedef struct NETWORKRECEIVEDATATYPE   suNetworkReceiveData;
@@ -119,7 +138,11 @@ typedef void (*state_entry)(void* pContext);
 typedef uint32_t (*state_execute)(void* pContext);
 typedef void (*state_exit)(void* pContext);
  
- 
+///////// MACROS ///////////////////////////////////////////////////////////////////////////////////
+
+
+///////// STRUCT DECLARATIONS //////////////////////////////////////////////////////////////////////
+
 /* User defined field of data. */
 #pragma pack(push,1)
 struct NETWORKHEADERTYPE
@@ -156,12 +179,12 @@ struct STATEMACHINECLASSTYPE
  
 struct STATEMACHINECONTEXTTYPE
 {
-    suStateMachineClass *states;
-    void* pContext;
+    suStateMachineClass *StateMachine;
     uint32_t currentState;
     uint32_t nextState;
     uint32_t uStateStartTime;
     uint32_t uStateElapsedTime;
+    void* pContext;
 };
  
 #pragma pack(push,1)
@@ -178,5 +201,26 @@ struct SYSTEMDATATYPE
     bool bDockingRequested;
     suPeripheralData AggregatePeripheralData;
 };
+
+#pragma pack(push,1)
+struct STATEREPORTTYPE
+{
+    char* sEndpointName;
+    char *sStateName;
+};
+#pragma pack(pop)
  
+///////// FUNCTION PROTOTYPES //////////////////////////////////////////////////////////////////////
+
+
+
+///////// CONSTANTS ////////////////////////////////////////////////////////////////////////////////
+
+
+///////// VARIABLES ////////////////////////////////////////////////////////////////////////////////
+
+extern char* aEndpointNames[ENDPOINT_COUNT];
+
+///////// POST-COMPILE PRE-PROCESSOR DIRECTIVES ////////////////////////////////////////////////////
+
 #endif

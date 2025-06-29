@@ -1,3 +1,4 @@
+ ///////// INCLUDES /////////////////////////////////////////////////////////////////////////////////
 #include <string.h>
 #include "communication.h"
 #include "common.h"
@@ -10,9 +11,38 @@
 #include "esp_now.h"
 #include "esp_crc.h"
  
+///////// POST-INCLUDE PRE-PROCESSOR DIRECTIVES ////////////////////////////////////////////////////
+
+
+
+
+
+///////// MNEMONICS ////////////////////////////////////////////////////////////////////////////////
+
+
+///////// DEFINES //////////////////////////////////////////////////////////////////////////////
+
 #define ESPNOW_MAXDELAY 512
  
- 
+///////// ENUMERATIONS /////////////////////////////////////////////////////////////////////////
+
+///////// FORWARD STRUCT DECLARATIONS //////////////////////////////////////////////////////////////
+
+///////// TYPEDEFS /////////////////////////////////////////////////////////////////////////////////
+
+///////// MACROS ///////////////////////////////////////////////////////////////////////////////////
+
+///////// FUNCTION PROTOTYPES //////////////////////////////////////////////////////////////////////
+
+///////// STRUCT DECLARATIONS //////////////////////////////////////////////////////////////////////
+
+///////// LOCAL CONSTANTS //////////////////////////////////////////////////////////////////////////
+
+
+///////// EXTERNAL CONSTANTS ///////////////////////////////////////////////////////////////////////
+
+
+///////// LOCAL VARIABLES ////////////////////////////////////////////////////////////////////////// 
  
 static QueueHandle_t send_queue = NULL;
 static QueueHandle_t receive_queue = NULL;
@@ -21,10 +51,14 @@ static uint8_t broadcast_mac[ESP_NOW_ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 static uint16_t sequenceIndex = 0;
 static bool bTransmitBusy = false;
  
+///////// EXTERNAL VARIABLES ///////////////////////////////////////////////////////////////////////
+
 extern suSystemData systemData;
- 
+
+///////// LOCAL FUNCTIONS ////////////////////////////////////////////////////////////////////////// 
+
 /* Prepare data to be sent. */
-void network_send(uint8_t *pBuffer, uint8_t uLength, eMessageId MessageId)
+void network_send(eMessageId MessageId, uint8_t *pBuffer, uint8_t uLength)
 {
     suNetworkPacket NetworkPacket;
  
@@ -131,26 +165,15 @@ void run_network_rx(void *pvParameter)
             {
                 printf("SYSTEM_REPORT\n");
                 suSystemData SystemData = *(suSystemData*)NetworkPacket.payload;
-                printf("DockStatus: %s\n", SystemData.PeripheralData.DockStatus ? "DOCKED" : "UNDOCKED");
-                printf("LockStatus: %s\n", SystemData.PeripheralData.LockStatus ? "LOCKED" : "UNLOCKED");
-                printf("MotorStatus: %d\n", SystemData.PeripheralData.MotorStatus);
                 printf("bDockingRequested: %s\n", SystemData.bDockingRequested ? "TRUE" : "FALSE");
             }
             break;
  
-            case SYSTEM_STATE_REPORT:
+            case STATE_REPORT:
             {
-                printf("SYSTEM_STATE_REPORT\n");
-                char *StateMachineState = (char*)NetworkPacket.payload;
-                printf("System StateMachineState: %s\n", StateMachineState);
-            }
-            break;
- 
-            case LOCK_STATE_REPORT:
-            {
-                printf("LOCK_STATE_REPORT\n");
-                char *StateMachineState = (char*)NetworkPacket.payload;
-                printf("Lock StateMachineState: %s\n", StateMachineState);
+                printf("STATE_REPORT\n");
+                suStateReport *pStateReport = (suStateReport*)NetworkPacket.payload;
+                printf("Endpoint: %s, State: %s\n", pStateReport->sEndpointName, pStateReport->sStateName);
             }
             break;
  
@@ -175,7 +198,9 @@ void run_network_rx(void *pvParameter)
         }
     }
 }
- 
+
+///////// EXTERNAL FUNCTIONS ///////////////////////////////////////////////////////////////////////
+
 void network_init(void)
 {
         // Initialize NVS
@@ -222,3 +247,5 @@ void network_init(void)
     xTaskCreate(run_network_tx, "run_network_tx", 2048, NULL, 4, NULL);
     xTaskCreate(run_network_rx, "run_network_rx", 2048, NULL, 4, NULL);
 }
+
+///////// POST-CODE COMPILER DIRECTIVES ////////////////////////////////////////////////////////////
