@@ -66,16 +66,18 @@ struct SYSTEMCONTEXTTYPE
 
 static suStateMachineClass StateMachineTemplate[SYSTEM_STATE_END] =
 {
-    [SYSTEM_STATE_START_UP] =        {.sName = NULL,    .on_Entry = Start_Up_On_Entry,      .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute       },
-    [SYSTEM_STATE_WAIT_FOR_DOCK] =   {.sName = NULL,    .on_Entry = Wait_For_Dock_On_Entry, .on_Exit = NULL,    .on_Execute = Wait_For_Dock_On_Execute  },
-    [SYSTEM_STATE_LOCKING] =         {.sName = NULL,    .on_Entry = Locking_On_Entry,       .on_Exit = NULL,    .on_Execute = Locking_On_Execute        },
-    [SYSTEM_STATE_UNLOCKING] =       {.sName = NULL,    .on_Entry = Unlocking_On_Entry,     .on_Exit = NULL,    .on_Execute = Unlocking_On_Execute      },
-    [SYSTEM_STATE_LOCKED] =          {.sName = NULL,    .on_Entry = Locked_On_Entry,        .on_Exit = NULL,    .on_Execute = Locked_On_Execute         },
-    [SYSTEM_STATE_FAULTED] =         {.sName = NULL,    .on_Entry = Faulted_On_Entry,       .on_Exit = NULL,    .on_Execute = Faulted_On_Execute        },
+    [SYSTEM_STATE_INVALID] =        {.sName = NULL, .on_Entry = NULL,                   .on_Exit = NULL,    .on_Execute = NULL                      },
+    [SYSTEM_STATE_START_UP] =       {.sName = NULL, .on_Entry = Start_Up_On_Entry,      .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute       },
+    [SYSTEM_STATE_WAIT_FOR_DOCK] =  {.sName = NULL, .on_Entry = Wait_For_Dock_On_Entry, .on_Exit = NULL,    .on_Execute = Wait_For_Dock_On_Execute  },
+    [SYSTEM_STATE_LOCKING] =        {.sName = NULL, .on_Entry = Locking_On_Entry,       .on_Exit = NULL,    .on_Execute = Locking_On_Execute        },
+    [SYSTEM_STATE_UNLOCKING] =      {.sName = NULL, .on_Entry = Unlocking_On_Entry,     .on_Exit = NULL,    .on_Execute = Unlocking_On_Execute      },
+    [SYSTEM_STATE_LOCKED] =         {.sName = NULL, .on_Entry = Locked_On_Entry,        .on_Exit = NULL,    .on_Execute = Locked_On_Execute         },
+    [SYSTEM_STATE_FAULTED] =        {.sName = NULL, .on_Entry = Faulted_On_Entry,       .on_Exit = NULL,    .on_Execute = Faulted_On_Execute        },
 };
  
 static char* aSystemStateNames[SYSTEM_STATE_END] =
 {
+    [SYSTEM_STATE_INVALID]          = "SYSTEM_INVALID",
     [SYSTEM_STATE_START_UP]         = "SYSTEM_START_UP",
     [SYSTEM_STATE_WAIT_FOR_DOCK]    = "SYSTEM_WAIT_FOR_DOCK",
     [SYSTEM_STATE_LOCKING]          = "SYSTEM_LOCKING",
@@ -97,42 +99,42 @@ extern suSystemData systemData;
  
 ///////// LOCAL FUNCTIONS ////////////////////////////////////////////////////////////////////////// 
 
-static void run_state_machine(suStateMachineContext StateMachineContext)
+static void run_state_machine(suStateMachineContext* pStateMachineContext)
 {
-    suSystemContext *pSystemContext = (suSystemContext*)StateMachineContext.pContext;
-    uint32_t nextState = StateMachineContext.nextState;
+    suSystemContext *pSystemContext = (suSystemContext*)pStateMachineContext->pContext;
+    uint32_t nextState = pStateMachineContext->nextState;
    
-    if (nextState != StateMachineContext.currentState)
+    if (nextState != pStateMachineContext->currentState)
     {
         if( nextState >= SYSTEM_STATE_END)
         {
             nextState = SYSTEM_STATE_FAULTED;
         }
        
-        suStateReport StateReport = { .sStateName = StateMachineContext.StateMachine[nextState].sName, .sEndpointName = pSystemContext->sName};
+        suStateReport StateReport = { .sStateName = pStateMachineContext->StateMachine[nextState].sName, .sEndpointName = pSystemContext->sName};
         network_send(STATE_REPORT, (uint8_t*)&StateReport, (strlen(StateReport.sStateName) + strlen(StateReport.sEndpointName)));
                    
-        if (StateMachineContext.StateMachine[StateMachineContext.currentState].on_Exit != NULL)
+        if (pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Exit != NULL)
         {
-            StateMachineContext.StateMachine[StateMachineContext.currentState].on_Exit(StateMachineContext.pContext);
+            pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Exit(pStateMachineContext);
         }
  
-        StateMachineContext.uStateStartTime = xTaskGetTickCount();
-        StateMachineContext.uStateElapsedTime = 0;
-        StateMachineContext.currentState = nextState;
+        pStateMachineContext->uStateStartTime = xTaskGetTickCount();
+        pStateMachineContext->uStateElapsedTime = 0;
+        pStateMachineContext->currentState = nextState;
  
-        if (StateMachineContext.StateMachine[StateMachineContext.currentState].on_Entry != NULL)
+        if (pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Entry != NULL)
         {
-            StateMachineContext.StateMachine[StateMachineContext.currentState].on_Entry(StateMachineContext.pContext);
+            pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Entry(pStateMachineContext);
         }
     }
     else
     {
-        StateMachineContext.uStateElapsedTime = (xTaskGetTickCount() - StateMachineContext.uStateStartTime);
+        pStateMachineContext->uStateElapsedTime = (xTaskGetTickCount() - pStateMachineContext->uStateStartTime);
        
-        if (StateMachineContext.StateMachine[StateMachineContext.currentState].on_Execute != NULL)
+        if (pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Execute != NULL)
         {
-            nextState = StateMachineContext.StateMachine[StateMachineContext.currentState].on_Execute(StateMachineContext.pContext);
+            pStateMachineContext->nextState = pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Execute(pStateMachineContext);
         }
     }
 }
@@ -148,7 +150,7 @@ static uint32_t Start_Up_On_Execute(void* pContext)
 {
     uint32_t nextState = SYSTEM_STATE_START_UP;
    
-    nextState = SYSTEM_STATE_WAIT_FOR_DOCK;
+    nextState = SYSTEM_STATE_UNLOCKING;
    
     return nextState;
 }
@@ -276,10 +278,10 @@ void controller_task(void *pvParameter)
 {
     while(1)
     {
-        vTaskDelay(10);
+        vTaskDelay(100);
         for (int peripheral = 0; peripheral < ENDPOINT_COUNT; peripheral++)
         {
-            run_state_machine(aIndividualStateMachineContext[peripheral]);
+            run_state_machine(&aIndividualStateMachineContext[peripheral]);
         }
     }
 }
@@ -301,7 +303,7 @@ void controller_init()
         }
 
         aIndividualStateMachineContext[endpoint].StateMachine = aggregateStateMachine[endpoint];
-        aIndividualStateMachineContext[endpoint].currentState = SYSTEM_STATE_START_UP;
+        aIndividualStateMachineContext[endpoint].currentState = SYSTEM_STATE_INVALID;
         aIndividualStateMachineContext[endpoint].nextState = SYSTEM_STATE_START_UP;
         aIndividualStateMachineContext[endpoint].pContext = (void*)&aSystemContext[endpoint];
     }

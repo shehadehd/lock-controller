@@ -24,16 +24,16 @@
 
 ///////// DEFINES //////////////////////////////////////////////////////////////////////////////
 
-#define GPIO_LOCK_1_            GPIO_NUM_20
-#define GPIO_LOCK_2_            GPIO_NUM_20
-#define GPIO_LOCK_3_            GPIO_NUM_20
-#define GPIO_LOCK_4_            GPIO_NUM_20
-#define GPIO_LOCK_5_            GPIO_NUM_20
-#define GPIO_LOCK_6_            GPIO_NUM_20
-#define GPIO_LOCK_7_            GPIO_NUM_20
-#define GPIO_LOCK_8_            GPIO_NUM_20
-#define GPIO_LOCK_9_            GPIO_NUM_20
-#define GPIO_LOCK_10_           GPIO_NUM_20
+#define GPIO_LOCK_1_            GPIO_NUM_9
+#define GPIO_LOCK_2_            GPIO_NUM_9
+#define GPIO_LOCK_3_            GPIO_NUM_9
+#define GPIO_LOCK_4_            GPIO_NUM_9
+#define GPIO_LOCK_5_            GPIO_NUM_9
+#define GPIO_LOCK_6_            GPIO_NUM_9
+#define GPIO_LOCK_7_            GPIO_NUM_9
+#define GPIO_LOCK_8_            GPIO_NUM_9
+#define GPIO_LOCK_9_            GPIO_NUM_9
+#define GPIO_LOCK_10_           GPIO_NUM_9
 
 #define GPIO_DOCK_1_            GPIO_NUM_19
 #define GPIO_DOCK_2_            GPIO_NUM_19
@@ -46,16 +46,16 @@
 #define GPIO_DOCK_9_            GPIO_NUM_19
 #define GPIO_DOCK_10_           GPIO_NUM_19
 
-#define GPIO_MOTOR_LOCK_1_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_2_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_3_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_4_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_5_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_6_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_7_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_8_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_9_      GPIO_NUM_18
-#define GPIO_MOTOR_LOCK_10_     GPIO_NUM_18
+#define GPIO_MOTOR_LOCK_1_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_2_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_3_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_4_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_5_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_6_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_7_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_8_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_9_      GPIO_NUM_8
+#define GPIO_MOTOR_LOCK_10_     GPIO_NUM_8
 
 #define GPIO_MOTOR_UNLOCK_1_    GPIO_NUM_17
 #define GPIO_MOTOR_UNLOCK_2_    GPIO_NUM_17

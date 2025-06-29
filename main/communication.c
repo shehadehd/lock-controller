@@ -163,7 +163,7 @@ void run_network_rx(void *pvParameter)
  
             case SYSTEM_REPORT:
             {
-                printf("SYSTEM_REPORT\n");
+                // printf("SYSTEM_REPORT\n");
                 suSystemData SystemData = *(suSystemData*)NetworkPacket.payload;
                 printf("bDockingRequested: %s\n", SystemData.bDockingRequested ? "TRUE" : "FALSE");
             }
@@ -171,7 +171,7 @@ void run_network_rx(void *pvParameter)
  
             case STATE_REPORT:
             {
-                printf("STATE_REPORT\n");
+                // printf("STATE_REPORT\n");
                 suStateReport *pStateReport = (suStateReport*)NetworkPacket.payload;
                 printf("Endpoint: %s, State: %s\n", pStateReport->sEndpointName, pStateReport->sStateName);
             }
