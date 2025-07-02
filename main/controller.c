@@ -108,12 +108,15 @@ static void run_state_machine(suStateMachineContext* pStateMachineContext)
     {
         if( nextState >= SYSTEM_STATE_END)
         {
+            printf("FAULTED!\n");
             nextState = SYSTEM_STATE_FAULTED;
         }
-       
         suStateReport StateReport = { .sStateName = pStateMachineContext->StateMachine[nextState].sName, .sEndpointName = pSystemContext->sName};
+#ifdef USE_NETWORK
         network_send(STATE_REPORT, (uint8_t*)&StateReport, (strlen(StateReport.sStateName) + strlen(StateReport.sEndpointName)));
-                   
+#else
+        printf("Endpoint: %s,\tState: %s\n", StateReport.sEndpointName, StateReport.sStateName);
+#endif
         if (pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Exit != NULL)
         {
             pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Exit(pStateMachineContext);
@@ -227,7 +230,7 @@ static uint32_t Unlocking_On_Execute(void* pContext)
 {
     suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
     suSystemContext *pSystemContext = (suSystemContext*)pStateMachineContext->pContext;
-    uint32_t nextState = SYSTEM_STATE_LOCKING;
+    uint32_t nextState = SYSTEM_STATE_UNLOCKING;
    
     if (peripheral_get_lock_status(pSystemContext->Endpoint) == LOCK_STATUS_UNLOCKED)
     {
@@ -247,7 +250,7 @@ static void Locked_On_Entry(void* pContext)
  
 static uint32_t Locked_On_Execute(void* pContext)
 {
-    uint32_t nextState = SYSTEM_STATE_LOCKING;
+    uint32_t nextState = SYSTEM_STATE_LOCKED;
    
     if (!systemData.bDockingRequested)
     {

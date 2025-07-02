@@ -1,6 +1,7 @@
 ///////// INCLUDES /////////////////////////////////////////////////////////////////////////////////
 #include "common.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "freertos/timers.h"
@@ -55,8 +56,11 @@ typedef struct PERIPHERALCONTEXTTYPE    suPeripheralContext;
 ///////// FUNCTION PROTOTYPES //////////////////////////////////////////////////////////////////////
 
 static uint32_t Start_Up_On_Execute(void* pContext);
+static void Unknown_On_Entry(void* pContext);
 static uint32_t Unknown_On_Execute(void* pContext);
+static void Unlocked_On_Entry(void* pContext);
 static uint32_t Unlocked_On_Execute(void* pContext);
+static void Locked_On_Entry(void* pContext);
 static uint32_t Locked_On_Execute(void* pContext);
 
 ///////// STRUCT DECLARATIONS //////////////////////////////////////////////////////////////////////
@@ -86,11 +90,11 @@ struct PERIPHERALCONTEXTTYPE
 // Framework that each endpoint uses for status evaluation
 static suStateMachineClass StateMachineTemplate[PERIPHERAL_STATE_END] =
 {
-    [PERIPHERAL_STATE_INVALID] =    {.sName = NULL, .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = NULL                  },
-    [PERIPHERAL_STATE_START_UP] =   {.sName = NULL, .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute   },
-    [PERIPHERAL_STATE_UNKNOWN] =    {.sName = NULL, .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Unknown_On_Execute    },
-    [PERIPHERAL_STATE_UNLOCKED] =   {.sName = NULL, .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Unlocked_On_Execute   },
-    [PERIPHERAL_STATE_LOCKED] =     {.sName = NULL, .on_Entry = NULL,   .on_Exit = NULL,    .on_Execute = Locked_On_Execute     },
+    [PERIPHERAL_STATE_INVALID] =    {.sName = NULL, .on_Entry = NULL,               .on_Exit = NULL,    .on_Execute = NULL                  },
+    [PERIPHERAL_STATE_START_UP] =   {.sName = NULL, .on_Entry = NULL,               .on_Exit = NULL,    .on_Execute = Start_Up_On_Execute   },
+    [PERIPHERAL_STATE_UNKNOWN] =    {.sName = NULL, .on_Entry = Unknown_On_Entry,   .on_Exit = NULL,    .on_Execute = Unknown_On_Execute    },
+    [PERIPHERAL_STATE_UNLOCKED] =   {.sName = NULL, .on_Entry = Unlocked_On_Entry,  .on_Exit = NULL,    .on_Execute = Unlocked_On_Execute   },
+    [PERIPHERAL_STATE_LOCKED] =     {.sName = NULL, .on_Entry = Locked_On_Entry,    .on_Exit = NULL,    .on_Execute = Locked_On_Execute     },
 };
  
 // list of all endpoint lock peripherals
@@ -188,10 +192,14 @@ static void run_state_machine(suStateMachineContext *pStateMachineContext)
         {
             nextState = SYSTEM_STATE_FAULTED;
         }
-       
+
         suStateReport StateReport = { .sStateName = pStateMachineContext->StateMachine[nextState].sName, .sEndpointName = pPeripheralContext->sName};
+#ifdef USE_NETWORK
         network_send(STATE_REPORT, (uint8_t*)&StateReport, (strlen(StateReport.sStateName) + strlen(StateReport.sEndpointName)));
-                   
+#else
+        printf("Endpoint: %s,\tState: %s\n", StateReport.sEndpointName, StateReport.sStateName);
+#endif
+            
         if (pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Exit != NULL)
         {
             pStateMachineContext->StateMachine[pStateMachineContext->currentState].on_Exit(pStateMachineContext);
@@ -223,23 +231,33 @@ static uint32_t Start_Up_On_Execute(void* pContext)
     suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = PERIPHERAL_STATE_START_UP;
  
-    if(pPeripheralContext->dockPinValue == ASSERTED)
+    if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
     {
-        if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
+        if(pPeripheralContext->dockPinValue == ASSERTED)
         {
             if (pStateMachineContext->uStateElapsedTime > PERIPHERAL_START_UP_TIMEOUT_MS)
             {
-                pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
-                pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
                 systemData.bDockingRequested = (gpio_get_level(aDockPin[0]) == ASSERTED);
                 nextState = PERIPHERAL_STATE_UNLOCKED;
             }
+        }
+        else
+        {
+            nextState = PERIPHERAL_STATE_UNKNOWN;
         }
     }
  
     return nextState;
 }
- 
+
+static void Unknown_On_Entry(void* pContext)
+{
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
+
+    pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
+}
+
 static uint32_t Unknown_On_Execute(void* pContext)
 {
     suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
@@ -250,19 +268,24 @@ static uint32_t Unknown_On_Execute(void* pContext)
     {
         if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_LOCKING)
         {
-            pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_LOCKED;
-            pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_LOCKED;
             nextState = PERIPHERAL_STATE_LOCKED;
         }
         else if (pPeripheralContext->PeripheralData.MotorStatus == MOTOR_STATUS_UNLOCKING)
         {
-            pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
-            pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
             nextState = PERIPHERAL_STATE_UNLOCKED;
         }
     }
  
     return nextState;
+}
+
+static void Unlocked_On_Entry(void* pContext)
+{
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
+
+    pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_UNLOCKED;
+    pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNLOCKED;
 }
  
 static uint32_t Unlocked_On_Execute(void* pContext)
@@ -271,13 +294,21 @@ static uint32_t Unlocked_On_Execute(void* pContext)
     suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = PERIPHERAL_STATE_UNLOCKED;
    
-    if(pPeripheralContext->lockPinValue != ASSERTED)
+    if(pPeripheralContext->lockPinValue != ASSERTED && pPeripheralContext->PeripheralData.MotorStatus != MOTOR_STATUS_STOPPED)
     {
-        pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
         nextState = PERIPHERAL_STATE_UNKNOWN;
     }
  
     return nextState;
+}
+
+static void Locked_On_Entry(void* pContext)
+{
+    suStateMachineContext *pStateMachineContext = (suStateMachineContext*)pContext;
+    suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
+
+    pPeripheralContext->PeripheralData.MotorStatus = MOTOR_STATUS_LOCKED;
+    pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_LOCKED;
 }
  
 static uint32_t Locked_On_Execute(void* pContext)
@@ -286,9 +317,8 @@ static uint32_t Locked_On_Execute(void* pContext)
     suPeripheralContext *pPeripheralContext = (suPeripheralContext*)pStateMachineContext->pContext;
     uint32_t nextState = PERIPHERAL_STATE_LOCKED;
    
-    if(pPeripheralContext->lockPinValue != ASSERTED)
+    if(pPeripheralContext->lockPinValue != ASSERTED && pPeripheralContext->PeripheralData.MotorStatus != MOTOR_STATUS_STOPPED)
     {
-        pPeripheralContext->PeripheralData.LockStatus = LOCK_STATUS_UNKNOWN;
         nextState = PERIPHERAL_STATE_UNKNOWN;
     }
  
@@ -416,7 +446,7 @@ void peripheral_init(void)
     gpio_conf.pull_down_en = GPIO_PULLUP_DISABLE; // Enable internal pull-down
     gpio_config(&gpio_conf);  
    
-    xTaskCreate(peripheral_task, "state_machine_task", 2048, NULL, 4, NULL);
+    xTaskCreate(peripheral_task, "peripheral_task", 2048, NULL, 4, NULL);
 }
  
 void peripheral_lock_clamp(eEndpoint Endpoint)
